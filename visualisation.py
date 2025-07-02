@@ -9,7 +9,6 @@ from datetime import datetime, timedelta
 
 st.set_page_config(page_title="Visualisation des Résultats", layout="centered")
 
-# Génération automatique du fichier CSV si absent
 def generer_donnees(fichier="visualisation.csv"):
     if os.path.exists(fichier):
         return
@@ -27,7 +26,9 @@ def generer_donnees(fichier="visualisation.csv"):
     def random_date():
         start = datetime.now() - timedelta(days=60)
         end = datetime.now()
-        return start + (end - start) * random.random()
+        delta = end - start
+        random_seconds = random.randint(0, int(delta.total_seconds()))
+        return start + timedelta(seconds=random_seconds)
 
     with open(fichier, mode="w", newline="", encoding="utf-8-sig") as file:
         writer = csv.writer(file, delimiter=';')
@@ -55,7 +56,6 @@ def generer_donnees(fichier="visualisation.csv"):
                 signalisation, infos_exam, satisfaction, commentaire
             ])
 
-# Chargement des données
 def charger_donnees(fichier="visualisation.csv"):
     try:
         df = pd.read_csv(fichier, sep=';', encoding='utf-8-sig')
@@ -67,7 +67,6 @@ def charger_donnees(fichier="visualisation.csv"):
         st.error(f"Erreur lors de la lecture des données : {e}")
         return None
 
-# Affichage graphique en camembert
 def plot_pie_chart(df, column):
     if column not in df.columns:
         st.warning(f"Colonne manquante : {column}")
@@ -92,22 +91,35 @@ def main():
 
     colonnes_non_question = ["Date", "Site", "Examen", "Commentaire", "Attente"]
 
-    # Filtres
-    col1, col2 = st.columns(2)
-    with col1:
-        site_choisi = st.selectbox("Filtrer par site", options=["Tous"] + sorted(df['Site'].dropna().unique().tolist()))
-    with col2:
-        examen_choisi = st.selectbox("Filtrer par examen", options=["Tous"] + sorted(df['Examen'].dropna().unique().tolist()))
+    sites_possibles = sorted(df['Site'].dropna().unique().tolist())
+    site_choisi = st.multiselect(
+        "Filtrer par site",
+        options=sites_possibles,
+        default=sites_possibles
+    )
+    if not site_choisi:
+        site_choisi = sites_possibles
+
+    examens_possibles = sorted(df['Examen'].dropna().unique().tolist())
+    examen_choisi = st.multiselect(
+        "Filtrer par examen",
+        options=examens_possibles,
+        default=examens_possibles
+    )
+    if not examen_choisi:
+        examen_choisi = examens_possibles
 
     df_filtre = df.copy()
-    if site_choisi != "Tous":
-        df_filtre = df_filtre[df_filtre['Site'] == site_choisi]
-    if examen_choisi != "Tous":
-        df_filtre = df_filtre[df_filtre['Examen'] == examen_choisi]
+    if site_choisi and len(site_choisi) != len(sites_possibles):
+        df_filtre = df_filtre[df_filtre['Site'].isin(site_choisi)]
+
+    if examen_choisi and len(examen_choisi) != len(examens_possibles):
+        df_filtre = df_filtre[df_filtre['Examen'].isin(examen_choisi)]
 
     st.markdown(f"**Nombre de réponses affichées : {len(df_filtre)}**")
 
     questions_possibles = [col for col in df.columns if col not in colonnes_non_question]
+
     question_choisie = st.selectbox("Choisir une question à visualiser", options=questions_possibles)
 
     st.subheader(f"Visualisation pour : {question_choisie}")
@@ -118,9 +130,9 @@ def main():
 
     if st.button("🔄 Purger les données"):
         if os.path.exists("visualisation.csv"):
-            with open("visualisation.csv", "w", encoding="utf-8") as f:
-                f.write("")  # vide fichier
-            st.success("Données purgées avec succès !")
+            os.remove("visualisation.csv")
+            generer_donnees()
+            st.success("Données purgées et fichier recréé avec succès !")
         else:
             st.warning("Le fichier 'visualisation.csv' n'existe pas.")
 
